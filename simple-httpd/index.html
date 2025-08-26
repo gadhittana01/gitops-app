@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple HTTPD</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 50px;
+            background-color: #fff5ee;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        h1 {
+            color: #8b4513;
+            margin-bottom: 20px;
+        }
+        p {
+            color: #654321;
+            font-size: 18px;
+            line-height: 1.6;
+        }
+        .version {
+            color: #7f8c8d;
+            font-size: 14px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to Simple HTTPD</h1>
+        <p>Ini tampilan dari HTTPD dan nama saya Giri</p>
+        <p><em>This is a display from HTTPD and my name is Giri</em></p>
+        <div class="version">
+            <p>Version: <span id="version">1.0.0</span></p>
+            <p>Build Time: <span id="buildTime">2024-01-01</span></p>
+        </div>
+    </div>
+    <script>
+        // Update version and build time from environment variables
+        document.getElementById('version').textContent = '${VERSION:-1.0.0}';
+        document.getElementById('buildTime').textContent = '${BUILD_TIME:-2024-01-01}';
+    </script>
+</body>
+</html>
