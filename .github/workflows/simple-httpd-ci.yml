@@ -13,13 +13,8 @@ on:
       - '.github/workflows/simple-httpd-ci.yml'
 
 env:
-  # Option 1: GitHub Container Registry (GHCR) - Recommended
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/simple-httpd
-  
-  # Option 2: Docker Hub - Uncomment lines below and comment GHCR lines above
-  # REGISTRY: docker.io
-  # IMAGE_NAME: gadhittana01/simple-httpd
+  REGISTRY: docker.io
+  IMAGE_NAME: gadhittana01/simple-httpd
 
 jobs:
   lint:
@@ -125,12 +120,6 @@ jobs:
         image-ref: 'simple-httpd:scan'
         format: 'sarif'
         output: 'trivy-results.sarif'
-
-    - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      with:
-        sarif_file: 'trivy-results.sarif'
 
   build-and-push:
     name: Build and Push Docker Image

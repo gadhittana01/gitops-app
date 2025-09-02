@@ -13,13 +13,8 @@ on:
       - '.github/workflows/simple-nginx-ci.yml'
 
 env:
-  # Option 1: GitHub Container Registry (GHCR) - Recommended
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/simple-nginx
-  
-  # Option 2: Docker Hub - Uncomment lines below and comment GHCR lines above
-  # REGISTRY: docker.io
-  # IMAGE_NAME: gadhittana01/simple-nginx
+  REGISTRY: docker.io
+  IMAGE_NAME: gadhittana01/simple-nginx
 
 jobs:
   lint:
