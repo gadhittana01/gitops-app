@@ -1,0 +1,236 @@
+name: Simple HTTPD - CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'simple-httpd/**'
+      - '.github/workflows/simple-httpd-ci.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'simple-httpd/**'
+      - '.github/workflows/simple-httpd-ci.yml'
+
+env:
+  # Option 1: GitHub Container Registry (GHCR) - Recommended
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/simple-httpd
+  
+  # Option 2: Docker Hub - Uncomment lines below and comment GHCR lines above
+  # REGISTRY: docker.io
+  # IMAGE_NAME: gadhittana01/simple-httpd
+
+jobs:
+  lint:
+    name: Lint Dockerfile
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Lint Dockerfile with Hadolint
+      uses: hadolint/hadolint-action@v3.1.0
+      with:
+        dockerfile: ./simple-httpd/Dockerfile
+        format: tty
+        failure-threshold: warning
+
+  test:
+    name: Test Application
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build test image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./simple-httpd
+        load: true
+        tags: simple-httpd:test
+        build-args: |
+          VERSION=${{ github.sha }}
+          BUILD_TIME=${{ github.event.head_commit.timestamp }}
+
+    - name: Test container startup
+      run: |
+        # Start container
+        docker run -d --name httpd-test -p 8081:80 simple-httpd:test
+        
+        # Wait for container to be ready
+        sleep 5
+        
+        # Test HTTP response
+        curl -f http://localhost:8081 || exit 1
+        
+        # Check if our custom content is present
+        if curl -s http://localhost:8081 | grep -q "Ini tampilan dari HTTPD dan nama saya Giri"; then
+          echo "✅ Custom content found in response"
+        else
+          echo "❌ Custom content not found in response"
+          exit 1
+        fi
+        
+        # Cleanup
+        docker stop httpd-test
+        docker rm httpd-test
+
+    - name: Test health check
+      run: |
+        # Start container
+        docker run -d --name httpd-health-test simple-httpd:test
+        
+        # Wait for health check to pass
+        timeout 60 bash -c 'until [ "$(docker inspect --format="{{.State.Health.Status}}" httpd-health-test)" == "healthy" ]; do sleep 2; done'
+        
+        echo "✅ Health check passed"
+        
+        # Cleanup
+        docker stop httpd-health-test
+        docker rm httpd-health-test
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name != 'pull_request'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build image for scanning
+      uses: docker/build-push-action@v5
+      with:
+        context: ./simple-httpd
+        load: true
+        tags: simple-httpd:scan
+        build-args: |
+          VERSION=${{ github.sha }}
+          BUILD_TIME=${{ github.event.head_commit.timestamp }}
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'simple-httpd:scan'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  build-and-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    if: github.event_name != 'pull_request'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        registry: docker.io
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./simple-httpd
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        build-args: |
+          VERSION=${{ github.sha }}
+          BUILD_TIME=${{ github.event.head_commit.timestamp }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Generate build summary
+      run: |
+        echo "## 🚀 Simple HTTPD Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Tags:** \`${{ steps.meta.outputs.tags }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Version:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Build Time:** \`${{ github.event.head_commit.timestamp }}\`" >> $GITHUB_STEP_SUMMARY
+
+  update-gitops:
+    name: Update GitOps Repository
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name != 'pull_request' && needs.build-and-push.result == 'success'
+    
+    steps:
+    - name: Update GitOps Manifests
+      run: |
+        echo "🔄 Updating GitOps repository for HTTPD deployment..."
+        
+        # Configure git
+        git config --global user.email "github-actions@github.com"
+        git config --global user.name "GitHub Actions"
+        
+        # Clone GitOps repository
+        git clone https://x-access-token:${{ secrets.GITOPS_REPO_TOKEN }}@github.com/${{ secrets.GITOPS_REPO_OWNER }}/gitops-argocd.git
+        cd gitops-argocd
+        
+        # Update HTTPD image tag in deployment file
+        echo "📝 Updating HTTPD image tag to ${{ github.sha }}"
+        sed -i "s|image: .*/simple-httpd:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-${{ github.sha }}|g" k8s/simple-httpd/deployment.yaml
+        
+        # Show the changes
+        echo "📋 Changes to be committed:"
+        git diff k8s/simple-httpd/deployment.yaml
+        
+        # Check if there are changes to commit
+        if git diff --quiet; then
+          echo "⚠️ No changes detected in deployment.yaml"
+          exit 0
+        fi
+        
+        # Commit and push changes
+        git add k8s/simple-httpd/deployment.yaml
+        git commit -m "🚀 Update HTTPD image to ${{ github.ref_name }}-${{ github.sha }} [skip ci]
+
+        - Application: simple-httpd
+        - Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-${{ github.sha }}
+        - Commit: ${{ github.sha }}
+        - Triggered by: ${{ github.actor }}"
+        
+        git push origin main
+        
+        echo "✅ GitOps repository updated successfully!"
+        echo "🔄 ArgoCD will automatically detect changes and sync the HTTPD application."
+        echo ""
+        echo "🎯 Updated image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-${{ github.sha }}"
