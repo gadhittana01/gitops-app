@@ -196,7 +196,7 @@ jobs:
         
         # Update NGINX image tag in deployment file
         echo "📝 Updating NGINX image tag to ${{ github.sha }}"
-        sed -i "s|image: .*/simple-nginx:.*|image: ${{ env.IMAGE_NAME }}:${{ github.ref_name }}-${{ github.sha }}|g" k8s/simple-nginx/deployment.yaml
+        sed -i "s|image: .*/simple-nginx:.*|image: ${{ env.IMAGE_NAME }}:${{ github.sha }}|g" k8s/simple-nginx/deployment.yaml
         
         # Show the changes
         echo "📋 Changes to be committed:"
