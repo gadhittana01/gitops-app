@@ -1,9 +1,12 @@
 FROM httpd:2.4
 
+# Set shell options for better error handling
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 # Install curl for health checks
 RUN apt-get update && \
     CURL_VERSION=$(apt-cache policy curl | grep Candidate | awk '{print $2}') && \
-    apt-get install -y --no-install-recommends curl=$CURL_VERSION && \
+    apt-get install -y --no-install-recommends "curl=$CURL_VERSION" && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy custom index.html
