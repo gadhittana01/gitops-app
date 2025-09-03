@@ -1,5 +1,8 @@
 FROM httpd:2.4
 
+# Install curl for health checks
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 # Copy custom index.html
 COPY index.html /usr/local/apache2/htdocs/index.html
 
